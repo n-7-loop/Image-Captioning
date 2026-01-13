@@ -49,10 +49,22 @@ def generate_caption(image, processor, model, device):
 def load_image_from_url(url):
     """Download and load image from URL."""
     try:
-        response = requests.get(url, timeout=10)
+        # Add headers to mimic a browser request
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, timeout=10, headers=headers)
         response.raise_for_status()
         image = Image.open(BytesIO(response.content)).convert("RGB")
         return image, None
+    except requests.exceptions.MissingSchema:
+        return None, "Invalid URL format. Please include http:// or https://"
+    except requests.exceptions.ConnectionError:
+        return None, "Could not connect to the URL. Please check your internet connection."
+    except requests.exceptions.Timeout:
+        return None, "Request timed out. The server took too long to respond."
+    except requests.exceptions.HTTPError as e:
+        return None, f"HTTP Error: {e.response.status_code}. The image could not be accessed."
     except requests.exceptions.RequestException as e:
         return None, f"Error downloading image: {str(e)}"
     except Exception as e:
@@ -127,19 +139,29 @@ def main():
     # Tab 3: Image URL
     with tab3:
         st.subheader("Load Image from URL")
+        st.markdown("Paste an image URL below (e.g., from Unsplash, Imgur, or direct image links)")
+        
         url = st.text_input(
             "Enter image URL",
-            placeholder="https://example.com/image.jpg",
-            key="url"
+            placeholder="https://images.unsplash.com/photo-example.jpg",
+            key="url",
+            help="Make sure the URL ends with an image extension (.jpg, .png, etc.) or points directly to an image"
         )
         
-        if st.button("Load and Caption", key="url_button"):
-            if url.strip():
-                with st.spinner("Downloading image..."):
+        # Automatically process URL when it's entered (no button needed)
+        if url and url.strip():
+            url = url.strip()
+            
+            # Check if URL starts with http:// or https://
+            if not url.startswith(('http://', 'https://')):
+                st.warning("⚠️ URL should start with http:// or https://")
+            else:
+                with st.spinner("Downloading and processing image..."):
                     image, error = load_image_from_url(url)
                 
                 if error:
-                    st.error(error)
+                    st.error(f"❌ {error}")
+                    st.info("💡 **Tips:**\n- Make sure the URL is a direct link to an image\n- Try right-clicking an image and selecting 'Copy image address'\n- Verify the URL works by pasting it in a new browser tab")
                 else:
                     col1, col2 = st.columns(2)
                     
@@ -150,9 +172,17 @@ def main():
                         with st.spinner("Generating caption..."):
                             caption = generate_caption(image, processor, model, device)
                         st.markdown("### Generated Caption:")
-                        st.info(caption)
-            else:
-                st.warning("Please enter a valid URL.")
+                        st.success(caption)
+        
+        # Example URLs section
+        with st.expander("📋 Try these example image URLs"):
+            st.markdown("""
+            Click to copy and paste into the URL field above:
+            
+            1. `https://images.unsplash.com/photo-1575936123452-b67c3203c357?w=800`
+            2. `https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/1200px-Cat03.jpg`
+            3. `https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?w=800`
+            """)
     
     # Footer
     st.markdown("---")
